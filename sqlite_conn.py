@@ -56,8 +56,15 @@ class SqliteConn:
         table_records = self.cursor.fetchall()
         return list(map(lambda x: x[0], table_records))
 
-    def insert_movie(self):
-        pass
+    def insert_movie(self, movie_id, movie_title, url_short, url_long, status):
+        """
+        Insert a new movie to be downloaded into the movies table.
+        """
+        self.cursor.execute(\
+            '''INSERT INTO movies (movie_id, movie_title, url_short, url_long, status)
+               VALUES (?, ?, ?, ?, ?)''',
+               (movie_id, movie_title, url_short, url_long, status))
+        self.conn.commit()
 
     def insert(self, url):
         self.cursor.execute("INSERT INTO video (url) VALUES (?)", (url,))

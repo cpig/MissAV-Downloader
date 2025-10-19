@@ -14,8 +14,8 @@ import logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s: %(message)s')
 # settings begin
 # This url should be manully set by the user.
-URL_MAIN="https://surrit.com/70ada67e-2a05-4c04-997f-5e9d7efdef41/720p/video%i.jpeg"
-FOLDER_NAME="sqte-530"
+URL_MAIN="https://surrit.com/8ee02204-300a-4706-b5dc-d107e8686ebb/720p/video%i.jpeg"
+FOLDER_NAME="sone-493"
 #settings end
 logging.info("Building Request Opener")
 opener = urllib.request.build_opener()
@@ -26,7 +26,7 @@ urllib.request.install_opener(opener)
 
 
 logging.info("Start downloading")
-count=0
+count=2070
 fail_try=0
 if not os.path.exists(FOLDER_NAME):
     os.mkdir(FOLDER_NAME)

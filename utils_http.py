@@ -1,24 +1,24 @@
-import urllib.request
-import re
 import logging
+import re
+import urllib.request
+
+import config
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(lineno)d: %(message)s')
 
-BASE_HEADER = {
-    'Accept': 'text/html,application/xhtml+xml,application/xml',
-    'Accept-Encoding': 'gzip, deflate, br, zstd',
-    'Accept-Language': 'ja-JP,ja;q=0.9,zh-CN;q=0.8,zh;q=0.7,en-US;q=0.6,en;q=0.5'
-}
-BASE_HEADER_POSTMAN = {
-    'User-Agent': 'PostmanRuntime/7.47.1',
-    'Accept': '*/*',
-    'Cache-Control':'no-cache'}
+def parse_host(url):
+    """
+    Parse the host from the given URL for header building.
+    """
+    host = re.findall(r"https?://([^/]+)/", url)[0]
+    logging.debug("Url=%s, Host=%s", url, host)
+    return host
 
 def get_url_from_id(movie_id):
     """
     Construct the MissAV movie URL from the given movie ID.
     """
-    url = f"https://missav.ws/ja/{movie_id}"
+    url = config.MOVIE_URL_PATTERN.format(movie_id)
     # url = f"https://missav.ws/{movie_id}"
     logging.info("Constructed URL: %s", url)
     return url
@@ -27,44 +27,49 @@ def get_html_from_url(url):
     """
     Fetch the HTML content from the given URL.
     """
-    # opener = urllib.request.build_opener()
-    host = re.findall(r"https?://([^/]+)/", url)[0]
-    logging.debug("Host=%s", host)
-    # opener.addheaders = [('Host', host)]
-    # urllib.request.install_opener(opener)
-    headers = BASE_HEADER_POSTMAN.copy()
-    headers['Host'] = host
+    headers = config.BASE_HEADER_POSTMAN.copy()
+    headers['Host'] = parse_host(url)
     req = urllib.request.Request(url, headers=headers)
     logging.debug("Request headers=%s", req.headers)
-    #req = urllib.request.Request(url, headers={"Host":host})
     logging.info("Fetching HTML from %s", url)
     with urllib.request.urlopen(req) as response:
         result = response.read().decode('utf-8')
         logging.info("HTML length=%d", len(result))
         return result
 
-def get_playlists_m3u8_from_movie_html(html):
+def get_movie_m3u8_from_html(page_html):
     """
-    Extract the playlists m3u8 URL from the movie HTML content.
-    The URL pattern has to be manually found by the user.
+    On movie play page, there is a embedded m3u8 file path. 
+    Playlists of all the resolutions are stored in that m3u8 file.
+    We would like to find out the path of the file, and use it to get a best resolution one. 
+    The URL pattern has to be manually found by the user, if missAV site upgrade frontend solution.
     """
-    matched_groups = re.search(r"m3u8\|.+\|video", html)
+    matched_groups = re.search(r"m3u8\|.+\|video", page_html)
     matched_string = matched_groups.group(0)
-    logging.info("M3U8 matched string: %s", matched_string)
-    str_list = matched_string.split('|')
-    m3u8_url = f"https://{str_list[7]}.{str_list[6]}/{str_list[5]}-{str_list[4]}-{str_list[3]}-{str_list[2]}-{str_list[1]}/playlist.m3u8"
+    logging.debug("M3U8 matched string: %s", matched_string)
+    s = matched_string.split('|')
+    m3u8_url = f"https://{s[7]}.{s[6]}/{s[5]}-{s[4]}-{s[3]}-{s[2]}-{s[1]}/playlist.m3u8"
     logging.info("Constructed playlists m3u8 URL: %s", m3u8_url)
     return m3u8_url
 
-def get_movie_title_from_movie_html(html):
-    matched_groups = re.search(r"<h1.*>.*<\/h1>", html)
+def get_movie_title_from_html(page_html):
+    """
+    Extract the movie title from the HTML content.
+    The title is displayed right down the video player.
+    """
+    matched_groups = re.search(r"<h1.*>.*<\/h1>", page_html)
     matched_string = matched_groups.group(0)
-    logging.info("Movie title matched string: %s", matched_string)
+    logging.debug("Movie title matched string: %s", matched_string)
     title = matched_string[1:-1].split('>')[1].split('<')[0]
     logging.info("Movie title: %s", title)
     return title
 
-def get_video_m3u8_from_playlists_m3u8(m3u8_txt):
+def parse_movie_m3u8(m3u8_txt):
+    """
+    Parse the playlists m3u8 content to get all the available resolutions and their paths.
+    Return a dict: key is resolution height(int), value is the m3u8 file name(str).
+    E.g. {360: 'video_360p.m3u8', 720: 'video_720p.m3u8', ...}
+    """
     logging.info("Parsing playlists m3u8 content")
     resolution_path = {}
     lines = m3u8_txt.split('\n')
@@ -72,6 +77,8 @@ def get_video_m3u8_from_playlists_m3u8(m3u8_txt):
     for i, line in enumerate(lines):
         if line.startswith('#'):
             match = resolution_re_pattern.search(line)
+            # A resolution line
+            #EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360,CODECS="..."
             if match:
                 resolution = match.group(0)
                 resolution_int = int(resolution.split('x')[1])
@@ -83,7 +90,12 @@ def get_video_m3u8_from_playlists_m3u8(m3u8_txt):
     logging.info("Available resolutions: %s", list(resolution_path.keys()))
     return resolution_path
 
-def get_path_folder(url):
+def get_path_folder(url:str):
+    """
+    Get the folder path from the given URL.
+    E.g. https://surrit.com/8ee02204-300a-4706-b5dc-d107e8686ebb/360p/playlist.m3u8
+    return https://surrit.com/8ee02204-300a-4706-b5dc-d107e8686ebb/360p
+    """
     return url.rsplit('/', 1)[0]
 
 def get_best_resolution_video_m3u8(m3u8_dict):
@@ -102,16 +114,30 @@ def get_video_ts_from_video_m3u8(m3u8_txt):
     logging.info("Total .ts files: %d", len(ts_list))
     return ts_list
 
-html = get_html_from_url(get_url_from_id("sqte-503"))
-playlist_m3u8_url = get_playlists_m3u8_from_movie_html(html)
-playlist_folder = get_path_folder(playlist_m3u8_url)
-movie_title = get_movie_title_from_movie_html(html)
-# print(playlist_m3u8_url)
+def download_single_segment(ts_url, target_file):
+    """
+    Download a single .ts segment from the given URL to the target file path.
+    """
+    logging.debug("Downloading segment from %s to %s", ts_url, target_file)
+    headers = config.BASE_HEADER_POSTMAN.copy()
+    headers['Host'] = parse_host(ts_url)
+    req = urllib.request.Request(ts_url, headers=headers)
+    with urllib.request.urlopen(req) as response:
+        with open(target_file, 'wb') as f:
+            f.write(response.read())
+    logging.info("Downloaded segment to %s", target_file)
 
-txt = get_html_from_url(playlist_m3u8_url)
-m3u8_dict = get_video_m3u8_from_playlists_m3u8(txt)
-video_m3u8_filename, best_resolution = get_best_resolution_video_m3u8(m3u8_dict)
-video_m3u8_url = f"{playlist_folder}/{video_m3u8_filename}"
-# print(video_m3u8_url)
-segments_list = get_video_ts_from_video_m3u8(get_html_from_url(video_m3u8_url))
-print(segments_list)
+if __name__ == "__main__":
+    html = get_html_from_url(get_url_from_id("sqte-503"))
+    playlist_m3u8_url = get_movie_m3u8_from_html(html)
+    playlist_folder = get_path_folder(playlist_m3u8_url)
+    movie_title = get_movie_title_from_html(html)
+    # print(playlist_m3u8_url)
+
+    txt = get_html_from_url(playlist_m3u8_url)
+    m3u8_dict = parse_movie_m3u8(txt)
+    video_m3u8_filename, best_resolution = get_best_resolution_video_m3u8(m3u8_dict)
+    video_m3u8_url = f"{playlist_folder}/{video_m3u8_filename}"
+    # print(video_m3u8_url)
+    segments_list = get_video_ts_from_video_m3u8(get_html_from_url(video_m3u8_url))
+    print(segments_list)
