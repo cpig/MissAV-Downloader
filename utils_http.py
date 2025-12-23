@@ -1,10 +1,14 @@
 import logging
 import re
+import time
 import urllib.request
 
 import config
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(lineno)d: %(message)s')
+
+RETRY_TIMES = 50
+RETRY_TIME_PERIOD = 10  # seconds
 
 def parse_host(url):
     """
@@ -27,15 +31,25 @@ def get_html_from_url(url):
     """
     Fetch the HTML content from the given URL.
     """
-    headers = config.BASE_HEADER_POSTMAN.copy()
-    headers['Host'] = parse_host(url)
-    req = urllib.request.Request(url, headers=headers)
-    logging.debug("Request headers=%s", req.headers)
-    logging.info("Fetching HTML from %s", url)
-    with urllib.request.urlopen(req) as response:
-        result = response.read().decode('utf-8')
-        logging.info("HTML length=%d", len(result))
-        return result
+    succeed = False
+    fail_attempts = 0
+    while not succeed:
+        try:
+            headers = config.BASE_HEADER_POSTMAN.copy()
+            headers['Host'] = parse_host(url)
+            req = urllib.request.Request(url, headers=headers)
+            logging.debug("Request headers=%s", req.headers)
+            logging.info("Fetching HTML from %s", url)
+            with urllib.request.urlopen(req) as response:
+                result = response.read().decode('utf-8')
+                logging.info("HTML length=%d", len(result))
+                succeed = True
+                return result
+        except urllib.error.URLError as e:
+            logging.error("ConnectionResetError! Check VPN status! %s", repr(e))
+            fail_attempts += 1
+            time.sleep(RETRY_TIME_PERIOD)
+            logging.info("Retrying to fetch HTML... Attempt %d", fail_attempts)
 
 def get_movie_m3u8_from_html(page_html):
     """
@@ -99,18 +113,24 @@ def get_path_folder(url:str):
     return url.rsplit('/', 1)[0]
 
 def get_best_resolution_video_m3u8(m3u8_dict):
+    """
+    Get the best resolution video m3u8 file path from the given m3u8 dict."""
     best_key = max(list(m3u8_dict.keys()))
     logging.info("Best resolution: %d, file: %s", best_key, m3u8_dict[best_key])
     return m3u8_dict[best_key], best_key
 
-def get_video_ts_from_video_m3u8(m3u8_txt):
+def get_video_ts_from_video_m3u8(m3u8_txt, ts_file_folder):
+    """
+    Parse the video m3u8 content to get all the .ts segment file URLs.
+    Return a list of .ts file URLs.
+    """
     ts_list = []
     lines = m3u8_txt.split('\n')
     for line in lines:
         if line.startswith('#'):
             continue
-        else:
-            ts_list.append(line.strip())
+        if line.strip():
+            ts_list.append(ts_file_folder + "/" + line.strip())
     logging.info("Total .ts files: %d", len(ts_list))
     return ts_list
 
@@ -125,7 +145,7 @@ def download_single_segment(ts_url, target_file):
     with urllib.request.urlopen(req) as response:
         with open(target_file, 'wb') as f:
             f.write(response.read())
-    logging.info("Downloaded segment to %s", target_file)
+    logging.debug("Downloaded segment to %s", target_file)
 
 if __name__ == "__main__":
     html = get_html_from_url(get_url_from_id("sqte-503"))
@@ -139,5 +159,6 @@ if __name__ == "__main__":
     video_m3u8_filename, best_resolution = get_best_resolution_video_m3u8(m3u8_dict)
     video_m3u8_url = f"{playlist_folder}/{video_m3u8_filename}"
     # print(video_m3u8_url)
-    segments_list = get_video_ts_from_video_m3u8(get_html_from_url(video_m3u8_url))
+    segments_list = get_video_ts_from_video_m3u8(get_html_from_url(video_m3u8_url),
+                                                 playlist_folder)
     print(segments_list)

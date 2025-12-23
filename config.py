@@ -1,4 +1,4 @@
-THREADS = 3
+THREADS = 5
 
 MAIN_SITE = "https://www.missav.com/"
 

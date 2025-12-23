@@ -4,29 +4,60 @@
 import argparse
 import logging
 
+import movie
 from movie import Movie
-import movie_downloader
-import sqlite_conn
+# import sqlite_conn
 import utils_http
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(lineno)d: %(message)s')
 
+def add_movie(movie_id):
+    movie = Movie(movie_id, source="internet")
+    movie.insert_movie_to_db()
+
+def change_movie_status(movie_id, new_status):
+    movie = Movie(movie_id, source="database")
+    movie.change_status(new_status)
+
+def download_movie_single():
+    ...
+
+def download_movie_batch():
+    ...
+
 parser = argparse.ArgumentParser()
-parser.add_argument('action', type=str, choices=['add', 'download', 'list', 'boost', 'change'],
+parser.add_argument('action', type=str,
+                    choices=['add', 'download', 'list', 'boost', 'change', 'delete'],
                     help='add, download, list, boost')
 parser.add_argument('-i', '--id', type=str, help='movie id, e.g. sone-499')
 parser.add_argument('-c', '--change', type=str, choices=['waiting', 'finished'],
                     help='force to re-download or mark as finished')
 args = parser.parse_args()
-if args.action == "download" and not args.id:
-    parser.error("the following arguments are required for 'download': -i/--id")
+if args.action in ("add", "delete", "boost", "change") and not args.id:
+    parser.error("The following arguments are required: -i/--id")
 
-print(args.action)
-print(args.id)
+# 新增待下载电影
+if args.action == "add":
+    add_movie(args.id)
 
-sql_conn = sqlite_conn.SqliteConn()
+# 修改movie下载状态，如从waiting变为finished
+if args.action == "change":
+    if not args.change:
+        parser.error("The following arguments are required: -c/--change")
+    change_movie_status(args.id, args.change)
 
-def add_movie(movie_id):
-    movie = Movie(movie_id, source="internet")
-    movie.set_movie_info_to_db()
+if args.action == "list":
+    # 展示单条movie信息
+    if args.id:
+        if movie.is_movie_id_in_db(args.id):
+            movie_obj = Movie(args.id, source="database")
+            movie_obj.print()
+    else:
+        ...
+
+if args.action == "delete":
+    movie.delete_movie_from_db(args.id)
+
+if args.action == "download":
+    ...
