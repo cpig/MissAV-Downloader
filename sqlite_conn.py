@@ -73,6 +73,8 @@ class SqliteConn:
             f'''DROP TABLE movie_seg_{movie_id.replace('-', '_')}''')
         self.conn.commit()
         logging.info("Deleted movie_seg_%s table.", movie_id)
+        self.cursor.execute('''VACUUM''')
+        self.conn.commit()
         return
     
     def get_waiting_segments_for_movie(self, movie_id):

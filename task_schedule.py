@@ -12,6 +12,10 @@ queue_lock = threading.Lock()
 # finish_lock = threading.Lock()
 
 def get_movie_id_to_download():
+    """Get a movie ID that is pending download.
+       Priority: downloading -> waiting
+       Return None if no movie to download.
+    """
     conn = sqlite_conn.SqliteConn()
     downloading_movies = conn.get_downloading_movie_ids()
     if downloading_movies:
@@ -28,6 +32,8 @@ def get_movie_id_to_download():
     return None
 
 def create_movie_segment_tasks(movie_to_download: movie.Movie):
+    """Before start downloading movie, create a table in the database to store and track
+       every single ts segment download status."""
     logging.info("Getting segment list M3U8 file for movie ID %s", movie_to_download.movie_id)
     playlist_folder = utils_http.get_path_folder(movie_to_download.movie_m3u8_url)
     video_m3u8_filename = movie_to_download.playlist_m3u8_url
@@ -41,6 +47,7 @@ def create_movie_segment_tasks(movie_to_download: movie.Movie):
     conn.close()
 
 def download_movie_segment(segment_queue: queue.Queue, movie_id: str):
+    """Core function of download movie segments in parallel."""
     while not segment_queue.empty():
         with queue_lock:
             seg_id, seg_url = segment_queue.get()
@@ -58,12 +65,17 @@ def download_movie_segment(segment_queue: queue.Queue, movie_id: str):
                 segment_queue.put((seg_id, seg_url))
 
 class SegmentDownloadThread(threading.Thread):
+    """Thread definition for downloading movie segments.
+       Check if the segment queue is empty, if not then get a task and download, 
+       if yes then exit. Therefore the task queue need to be initialized with 
+       all tasks before setting up these download threads.
+    """
     def __init__(self, thread_name,segment_queue: queue.Queue,
-                 finished_queue: queue.Queue, movie_id: str):
+                 movie_id: str):
         threading.Thread.__init__(self)
         self.name = thread_name
         self.segment_queue = segment_queue
-        self.finished_queue = finished_queue
+        # self.finished_queue = finished_queue
         self.movie_id = movie_id
         logging.info("Thread %s initialized for movie ID %s", self.name, self.movie_id)
 
@@ -72,41 +84,52 @@ class SegmentDownloadThread(threading.Thread):
         logging.info("Thread %s finished for movie ID %s", self.name, self.movie_id)
 
 def download_movie_by_segments(movie_to_download: movie.Movie, num_threads: int=config.THREADS):
+    """Download movie by its segments using multi-threading.
+       1. Get all pending segments from database
+       2. Create a queue and insert all pending segments into the queue
+       3. Create multiple threads to download segments from the queue
+       4. Wait for all threads to finish"""
+    # 获取下载文件列表
     conn = sqlite_conn.SqliteConn()
     segment_records = conn.get_waiting_segments_for_movie(movie_to_download.movie_id)
+    conn.close()
+    # 创建下载任务队列
     segment_queue = queue.Queue()
-    finished_queue = queue.Queue()
     for seg_id, seg_url in segment_records:
         segment_queue.put((seg_id, seg_url))
     logging.info("Inserted %i pending tasks into queue", segment_queue.qsize())
     if not os.path.exists(movie_to_download.movie_id):
         os.makedirs(movie_to_download.movie_id)
     logging.info("Creating downloading threads")
+    # 创建下载线程
     threads = []
     for i in range(num_threads):
         thread = SegmentDownloadThread(thread_name=f"Thread-{i+1}",
                                        segment_queue=segment_queue,
-                                       finished_queue=finished_queue,
+                                       # finished_queue=finished_queue,
                                        movie_id=movie_to_download.movie_id)
         thread.start()
         threads.append(thread)
+    # 等待所有线程完成
     for thread in threads:
         thread.join()
-    #while not finished_queue.empty():
-    #    seg_id = finished_queue.get()
-    #    conn.update_segment_status(movie_to_download.movie_id, seg_id, "finished")
-    conn.close()
     logging.info("All segments downloaded for movie ID %s", movie_to_download.movie_id)
 
 def merge_ts_into_one(movie_to_download: movie.Movie):
+    """After finishing all the segments download tasks, merge downloaded .ts 
+       segments into one single .ts file."""
     logging.info("Merging downloaded ts files ...")
     movie_id = movie_to_download.movie_id
     movie_title = movie_to_download.movie_title
-    os.system(f"copy /b {movie_id}\\*.ts {movie_title}.ts")
-    os.system(f"rmdir /s /q {movie_id}")
+    # 合并所有视频片段并重命名
+    os.system(f'copy /b {movie_id}\\*.ts "{movie_title}.ts"')
+    # 删除下载中间文件
+    os.system(f"rmdir /s /q  {movie_id}")
     logging.info("Merged all .ts segments into %s.ts", movie_title)
 
 def download_movie(movie_id: str):
+    """Download a single movie by its movie ID. Firstly check its status, 
+       if it is waiting then create tasks and change its status to downloading,"""
     logging.info("Start downloading movie %s.", movie_id)
     movie_to_download = movie.Movie(movie_id=movie_id, source="database")
     movie_to_download.print()
@@ -115,10 +138,16 @@ def download_movie(movie_id: str):
         movie_to_download.change_status("downloading")
     download_movie_by_segments(movie_to_download=movie_to_download)
     merge_ts_into_one(movie_to_download=movie_to_download)
+    # After finishing download, delete the segment table
+    conn = sqlite_conn.SqliteConn()
+    conn.delete_movie_seg_table(movie_id=movie_to_download.movie_id)
+    conn.close()
+    # 修改电影状态为finished
     movie_to_download.change_status("finished")
     logging.info("Movie ID %s download finished.", movie_id)
 
 def download_movies_pending():
+    """Download all pending movies in a batch."""
     conn = sqlite_conn.SqliteConn()
     movie_downloading = conn.get_downloading_movie_ids()
     movie_waiting = conn.get_waiting_movie_ids()
@@ -128,3 +157,6 @@ def download_movies_pending():
 
 if __name__ == "__main__":
     download_movies_pending()
+    # movie_id = 'sone-123'
+    # movie_to_download = movie.Movie(movie_id=movie_id, source="database")
+    # merge_ts_into_one(movie_to_download)
