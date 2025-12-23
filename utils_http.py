@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 import time
 import urllib.request
@@ -143,6 +144,9 @@ def download_single_segment(ts_url, target_file):
     headers['Host'] = parse_host(ts_url)
     req = urllib.request.Request(ts_url, headers=headers)
     with urllib.request.urlopen(req) as response:
+        if os.path.exists(target_file):
+            os.remove(target_file)
+            logging.warning("Removed existing file %s", target_file)
         with open(target_file, 'wb') as f:
             f.write(response.read())
     logging.debug("Downloaded segment to %s", target_file)

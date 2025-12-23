@@ -68,6 +68,13 @@ class SqliteConn:
         self.conn.commit()
         logging.info("Inserted %d segments into movie_seg_%s table.", len(ts_list), movie_id)
     
+    def delete_movie_seg_table(self, movie_id):
+        self.cursor.execute(\
+            f'''DROP TABLE movie_seg_{movie_id.replace('-', '_')}''')
+        self.conn.commit()
+        logging.info("Deleted movie_seg_%s table.", movie_id)
+        return
+    
     def get_waiting_segments_for_movie(self, movie_id):
         self.cursor.execute(\
             f'''SELECT seg_id, url FROM movie_seg_{movie_id.replace('-', '_')}         
@@ -181,15 +188,17 @@ class SqliteConn:
         self.cursor.execute(\
             '''SELECT movie_id FROM movies WHERE status = 'waiting' ''')
         records = self.cursor.fetchall()
+        logging.info("Found %d waiting movies.", len(records))
         return [record[0] for record in records]
 
-    def get_downloading_movie_id(self):
+    def get_downloading_movie_ids(self):
         """
         Get the movie_id of the movie which is currently 'downloading'.
         """
         self.cursor.execute(\
             '''SELECT movie_id FROM movies WHERE status = 'downloading' ''')
         records = self.cursor.fetchall()
+        logging.info("Found %d downloading movies.", len(records))
         return [record[0] for record in records]
 
     def is_movie_id_exist(self, movie_id):

@@ -7,6 +7,7 @@ import logging
 import movie
 from movie import Movie
 # import sqlite_conn
+import task_schedule
 import utils_http
 
 logging.basicConfig(level=logging.INFO,
@@ -20,11 +21,11 @@ def change_movie_status(movie_id, new_status):
     movie = Movie(movie_id, source="database")
     movie.change_status(new_status)
 
-def download_movie_single():
-    ...
+def download_movie_single(movie_id):
+    task_schedule.download_movie(movie_id)
 
 def download_movie_batch():
-    ...
+    task_schedule.download_movies_pending()
 
 parser = argparse.ArgumentParser()
 parser.add_argument('action', type=str,
@@ -60,4 +61,12 @@ if args.action == "delete":
     movie.delete_movie_from_db(args.id)
 
 if args.action == "download":
-    ...
+    # 下载单个电影
+    if args.id:
+        if not movie.is_movie_id_in_db(args.id):
+            logging.error("Movie ID %s not found in database", args.id)
+            add_movie(args.id)
+        download_movie_single(args.id)
+    # 批量下载电影
+    else:
+        download_movie_batch()
