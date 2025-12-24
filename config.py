@@ -1,5 +1,7 @@
 THREADS = 5
 
+HTTP_TIMEOUT = 30  # seconds
+
 MAIN_SITE = "https://www.missav.com/"
 
 MOVIE_URL_PATTERN = "https://missav.ws/ja/{}"
@@ -13,3 +15,5 @@ BASE_HEADER_POSTMAN = {
     'User-Agent': 'PostmanRuntime/7.47.1',
     'Accept': '*/*',
     'Cache-Control':'no-cache'}
+
+SQLITE_DB_PATH = "missav.db"

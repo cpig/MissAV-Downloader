@@ -4,6 +4,10 @@ import sqlite_conn
 import utils_http
 
 class Movie:
+    '''
+    Movie class to represent a movie object.
+    Can be initialized from internet or database.
+    '''
     def __init__(self, movie_id: str, source: str):
         logging.info("Initializing Movie %s from %s", movie_id, source)
         self.movie_id = movie_id
@@ -24,23 +28,34 @@ class Movie:
             if not is_movie_id_in_db(self.movie_id):
                 logging.error("Cannot intialize from database, %s does not exist", self.movie_id)
                 return
-            logging.info("Getting movie info from SQLite")
+            logging.debug("Getting movie info from SQLite")
             self.get_movie_info_from_db()
             if (not self.movie_title) or (not self.playlist_m3u8_url) or (not self.movie_m3u8_url):
-                logging.error("Movie ID %s info incomplete in database", self.movie_id)
-                logging.info("Fetching movie info from internet instead")
+                logging.error("Movie ID %s info incomplete in database.", self.movie_id)
+                logging.info("Fetching movie info from internet instead.")
                 self.get_movie_info_from_internet()
+                self.update_movie_to_db()
+                logging.debug("Updated movie info in database.")
         return
 
     def print(self):
-        logging.info("Movie ID: %s", self.movie_id)
-        logging.info("Movie Title: %s", self.movie_title)
-        logging.info("Movie Short URL: %s", self.movie_short_url)
-        logging.info("Playlist M3U8 URL: %s", self.playlist_m3u8_url)
-        logging.info("Status: %s", self.status)
+        #logging.info("Movie ID: %s", self.movie_id)
+        #logging.info("Movie Title: %s", self.movie_title)
+        #logging.info("Movie Short URL: %s", self.movie_short_url)
+        #logging.info("Playlist M3U8 URL: %s", self.playlist_m3u8_url)
+        #logging.info("Status: %s", self.status)
+        print(f"-------- INFO CARD OF {self.movie_id.upper()} --------")
+        #print("Movie ID:\t %s", self.movie_id)
+        print(f"Movie Title: \t{self.movie_title}")
+        print(f"Short URL: \t{self.movie_short_url}")
+        print(f"Movie M3U8: \t{self.movie_m3u8_url}")
+        print(f"Best Reso: \t{self.playlist_m3u8_url}")
+        print(f"Status: \t{self.status}")
+        print("----------------------------------------")
 
     def get_movie_info_from_internet(self):
-        '''Crawl movie info from internet given movie_id
+        '''
+        Crawl movie info from internet given movie_id
         Store into current movie object.
         '''
         self.movie_short_url = utils_http.get_url_from_id(self.movie_id)
@@ -57,7 +72,8 @@ class Movie:
             self.movie_reso_playlists)
 
     def get_movie_info_from_db(self):
-        '''Get movie info from database given movie_id
+        '''
+        Get movie info from database given movie_id
         Store into current movie object.
         '''
         conn = sqlite_conn.SqliteConn()
@@ -74,7 +90,8 @@ class Movie:
         conn.close()
 
     def insert_movie_to_db(self):
-        '''Insert the current movie object into the database.'''
+        '''
+        Insert the current movie object into the database.'''
         conn = sqlite_conn.SqliteConn()
         conn.insert_movie(self.movie_id, self.movie_title, self.movie_short_url,
                           self.status, self.playlist_m3u8_url, self.has_1080p,
@@ -84,37 +101,41 @@ class Movie:
         conn.close()
 
     def update_movie_to_db(self):
-        '''Update the current movie object into the database.'''
+        '''
+        Update the current movie object into the database.'''
         conn = sqlite_conn.SqliteConn()
         conn.update_movie(self.movie_id, self.movie_title, self.movie_short_url,
                           self.status, self.playlist_m3u8_url, self.has_1080p,
                           self.has_720p, self.has_480p, self.has_360p,
                           self.movie_m3u8_url)
-        logging.info("Updated movie ID %s into database", self.movie_id)
+        logging.debug("Updated movie ID %s into database", self.movie_id)
         conn.close()
 
     def change_status(self, new_status):
-        '''Change the movie status and update the database.'''
+        '''
+        Change the movie status and update the database.'''
         self.status = new_status
         conn = sqlite_conn.SqliteConn()
         conn.update_movie_status(self.movie_id, self.status)
         conn.close()
 
 def is_movie_id_in_db(movie_id: str) -> bool:
-    '''Check if a movie ID exists in the database.'''
-    logging.info("Checking if movie ID %s exists in database", movie_id)
+    '''
+    Check if a movie ID exists in the database.'''
+    logging.debug("Checking if movie ID %s exists in database", movie_id)
     conn = sqlite_conn.SqliteConn()
     exists = conn.is_movie_id_exist(movie_id)
     if exists:
-        logging.info("Movie ID %s exists in database", movie_id)
+        logging.debug("Movie ID %s exists in database", movie_id)
     else:
-        logging.info("Movie ID %s does not exist in database", movie_id)
+        logging.debug("Movie ID %s does not exist in database", movie_id)
     conn.close()
     return exists
 
 def delete_movie_from_db(movie_id: str):
-    '''Delete a movie from the database by its movie ID.'''
-    logging.info("Deleting movie ID %s from database", movie_id)
+    '''
+    Delete a movie from the database by its movie ID.'''
+    logging.warning("Deleting movie ID %s from database", movie_id)
     conn = sqlite_conn.SqliteConn()
     conn.delete_movie_by_id(movie_id)
     logging.info("Deleted movie ID %s from database", movie_id)

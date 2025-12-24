@@ -4,22 +4,28 @@ Table 'movies' stores all the movie downloaded or to be downloaded.
 When downloading a specific movie, a movie-level table is created to 
 store the file segments of each movie.
 Author: c_pig8828@163.com
-Date: 2025-09-24
+Date: 2025-12-24
 """
 import datetime
 import logging
 import sqlite3
 
+import config
+
 logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(lineno)d: %(message)s')
+                    format='%(asctime)s - %(levelname)s: %(message)s')
 
 class SqliteConn:
+    """
+    SQLite connection class to handle all database operations.
+    Including: movie-list table CRUD, movie-level segment table CRUD.
+    """
     def __init__(self):
         """
         Initialize the SQLite connection and create the core table if not exists.
         """
         logging.debug("Connecting to SQLite database 'missav.db' ...")
-        self.conn = sqlite3.connect('missav.db')
+        self.conn = sqlite3.connect(config.SQLITE_DB_PATH)
         self.cursor = self.conn.cursor()
         table_list = self.get_tables()
         if 'movies' not in table_list:
@@ -69,6 +75,8 @@ class SqliteConn:
         logging.info("Inserted %d segments into movie_seg_%s table.", len(ts_list), movie_id)
     
     def delete_movie_seg_table(self, movie_id):
+        """
+        Delete the movie-level segment task table."""
         self.cursor.execute(\
             f'''DROP TABLE movie_seg_{movie_id.replace('-', '_')}''')
         self.conn.commit()
@@ -78,12 +86,16 @@ class SqliteConn:
         return
     
     def get_waiting_segments_for_movie(self, movie_id):
+        """
+        Get unfinished segments as pending tasks."""
         self.cursor.execute(\
             f'''SELECT seg_id, url FROM movie_seg_{movie_id.replace('-', '_')}         
                 WHERE status = 'waiting' ''')
         return self.cursor.fetchall()
     
     def update_segment_status(self, movie_id, seg_id, new_status, local_path=""):
+        """
+        Update the status of a specific segment."""
         self.cursor.execute(\
             f'''UPDATE movie_seg_{movie_id.replace('-', '_')} 
                 SET status=?, local_path=? WHERE seg_id=?''',
@@ -143,7 +155,8 @@ class SqliteConn:
         return
 
     def update_movie_status(self, movie_id, new_status):
-        """"Change only status instead of whole movie info update."""
+        """"
+        Change only status instead of whole movie info update."""
         cur_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.cursor.execute(\
             '''UPDATE movies 

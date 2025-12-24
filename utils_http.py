@@ -6,7 +6,7 @@ import urllib.request
 
 import config
 logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(lineno)d: %(message)s')
+                    format='%(asctime)s - %(levelname)s: %(message)s')
 
 RETRY_TIMES = 50
 RETRY_TIME_PERIOD = 10  # seconds
@@ -143,10 +143,10 @@ def download_single_segment(ts_url, target_file):
     headers = config.BASE_HEADER_POSTMAN.copy()
     headers['Host'] = parse_host(ts_url)
     req = urllib.request.Request(ts_url, headers=headers)
-    with urllib.request.urlopen(req) as response:
+    with urllib.request.urlopen(req, timeout=config.HTTP_TIMEOUT) as response:
         if os.path.exists(target_file):
             os.remove(target_file)
-            logging.warning("Removed existing file %s", target_file)
+            logging.debug("Removed existing file %s", target_file)
         with open(target_file, 'wb') as f:
             f.write(response.read())
     logging.debug("Downloaded segment to %s", target_file)

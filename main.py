@@ -6,26 +6,11 @@ import logging
 
 import movie
 from movie import Movie
-# import sqlite_conn
 import task_schedule
-import utils_http
 
 logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(lineno)d: %(message)s')
-
-def add_movie(movie_id):
-    movie = Movie(movie_id, source="internet")
-    movie.insert_movie_to_db()
-
-def change_movie_status(movie_id, new_status):
-    movie = Movie(movie_id, source="database")
-    movie.change_status(new_status)
-
-def download_movie_single(movie_id):
-    task_schedule.download_movie(movie_id)
-
-def download_movie_batch():
-    task_schedule.download_movies_pending()
+                    format='%(asctime)s - %(levelname)s: %(message)s')
+#                    format='%(asctime)s - %(levelname)s - %(lineno)d: %(message)s')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('action', type=str,
@@ -40,13 +25,15 @@ if args.action in ("add", "delete", "boost", "change") and not args.id:
 
 # 新增待下载电影
 if args.action == "add":
-    add_movie(args.id)
+    movie = Movie(args.id, source="internet")
+    movie.insert_movie_to_db()
 
 # 修改movie下载状态，如从waiting变为finished
 if args.action == "change":
     if not args.change:
         parser.error("The following arguments are required: -c/--change")
-    change_movie_status(args.id, args.change)
+    movie = Movie(args.id, source="database")
+    movie.change_status(args.change)
 
 if args.action == "list":
     # 展示单条movie信息
@@ -65,8 +52,9 @@ if args.action == "download":
     if args.id:
         if not movie.is_movie_id_in_db(args.id):
             logging.error("Movie ID %s not found in database", args.id)
-            add_movie(args.id)
-        download_movie_single(args.id)
+            movie = Movie(args.id, source="internet")
+            movie.insert_movie_to_db()
+        task_schedule.download_movie(args.id)
     # 批量下载电影
     else:
-        download_movie_batch()
+        task_schedule.download_movies_pending()
