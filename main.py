@@ -1,6 +1,14 @@
 """
-"""
+Main entry point for MissAV Downloader.
+Supports adding movies, downloading movies, listing movies,
+changing movie status and deleting movies.
 
+TO-DO LIST:
+1. Retry mechanism
+2. Download error processing
+3. 下载中电影的删除
+4. 下载后发现不完整的情况
+"""
 import argparse
 import logging
 
@@ -14,9 +22,10 @@ logging.basicConfig(level=logging.INFO,
 
 parser = argparse.ArgumentParser()
 parser.add_argument('action', type=str,
-                    choices=['add', 'download', 'list', 'boost', 'change', 'delete'],
-                    help='add, download, list, boost')
-parser.add_argument('-i', '--id', type=str, help='movie id, e.g. sone-499')
+                    choices=['add', 'download', 'list', 'change', 'delete'],
+                    help='add, download, list, change, delete')
+parser.add_argument('-i', '--id', type=str,
+                    help='Movie id, e.g. sone-499. Supports multiple IDs separated by comma.')
 parser.add_argument('-c', '--change', type=str, choices=['waiting', 'finished'],
                     help='force to re-download or mark as finished')
 args = parser.parse_args()
@@ -25,8 +34,12 @@ if args.action in ("add", "delete", "boost", "change") and not args.id:
 
 # 新增待下载电影
 if args.action == "add":
-    movie = Movie(args.id, source="internet")
-    movie.insert_movie_to_db()
+    if not args.id:
+        parser.error("The following arguments are required: -i/--id")
+    id_list = args.id.split(",")
+    for movie_id in id_list:
+        movie = Movie(movie_id, source="internet")
+        movie.insert_movie_to_db()
 
 # 修改movie下载状态，如从waiting变为finished
 if args.action == "change":

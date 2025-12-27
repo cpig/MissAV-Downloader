@@ -1,3 +1,8 @@
+"""
+HTTP utility functions for MissAV Downloader.
+Includes functions for constructing URLs, fetching HTML content,
+parsing m3u8 files, and downloading video segments.
+"""
 import logging
 import os
 import re
@@ -7,9 +12,6 @@ import urllib.request
 import config
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s: %(message)s')
-
-RETRY_TIMES = 50
-RETRY_TIME_PERIOD = 10  # seconds
 
 def parse_host(url):
     """
@@ -25,7 +27,7 @@ def get_url_from_id(movie_id):
     """
     url = config.MOVIE_URL_PATTERN.format(movie_id)
     # url = f"https://missav.ws/{movie_id}"
-    logging.info("Constructed URL: %s", url)
+    logging.debug("Constructed URL: %s", url)
     return url
 
 def get_html_from_url(url):
@@ -34,23 +36,24 @@ def get_html_from_url(url):
     """
     succeed = False
     fail_attempts = 0
-    while not succeed:
+    while (not succeed) and fail_attempts < config.HTTP_RETRY_TIMES:
         try:
             headers = config.BASE_HEADER_POSTMAN.copy()
             headers['Host'] = parse_host(url)
             req = urllib.request.Request(url, headers=headers)
             logging.debug("Request headers=%s", req.headers)
-            logging.info("Fetching HTML from %s", url)
+            logging.debug("Fetching HTML from %s", url)
             with urllib.request.urlopen(req) as response:
                 result = response.read().decode('utf-8')
-                logging.info("HTML length=%d", len(result))
+                logging.debug("HTML length=%d", len(result))
                 succeed = True
                 return result
         except urllib.error.URLError as e:
             logging.error("ConnectionResetError! Check VPN status! %s", repr(e))
             fail_attempts += 1
-            time.sleep(RETRY_TIME_PERIOD)
+            time.sleep(config.HTTP_RETRY_PERIOD)
             logging.info("Retrying to fetch HTML... Attempt %d", fail_attempts)
+    raise ConnectionError(f"Failed to fetch HTML: {url}")
 
 def get_movie_m3u8_from_html(page_html):
     """
@@ -64,7 +67,7 @@ def get_movie_m3u8_from_html(page_html):
     logging.debug("M3U8 matched string: %s", matched_string)
     s = matched_string.split('|')
     m3u8_url = f"https://{s[7]}.{s[6]}/{s[5]}-{s[4]}-{s[3]}-{s[2]}-{s[1]}/playlist.m3u8"
-    logging.info("Constructed playlists m3u8 URL: %s", m3u8_url)
+    logging.debug("Constructed playlists m3u8 URL: %s", m3u8_url)
     return m3u8_url
 
 def get_movie_title_from_html(page_html):
@@ -150,19 +153,3 @@ def download_single_segment(ts_url, target_file):
         with open(target_file, 'wb') as f:
             f.write(response.read())
     logging.debug("Downloaded segment to %s", target_file)
-
-if __name__ == "__main__":
-    html = get_html_from_url(get_url_from_id("sqte-503"))
-    playlist_m3u8_url = get_movie_m3u8_from_html(html)
-    playlist_folder = get_path_folder(playlist_m3u8_url)
-    movie_title = get_movie_title_from_html(html)
-    # print(playlist_m3u8_url)
-
-    txt = get_html_from_url(playlist_m3u8_url)
-    m3u8_dict = parse_movie_m3u8(txt)
-    video_m3u8_filename, best_resolution = get_best_resolution_video_m3u8(m3u8_dict)
-    video_m3u8_url = f"{playlist_folder}/{video_m3u8_filename}"
-    # print(video_m3u8_url)
-    segments_list = get_video_ts_from_video_m3u8(get_html_from_url(video_m3u8_url),
-                                                 playlist_folder)
-    print(segments_list)

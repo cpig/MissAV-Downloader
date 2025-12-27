@@ -64,7 +64,7 @@ class SqliteConn:
                    )
                 ''')
         self.conn.commit()
-        logging.info("Table movie_segs for %s created.", movie_id)
+        logging.debug("Table movie_segs for %s created.", movie_id)
 
         sql_multiple_insert = f"""INSERT INTO movie_seg_{movie_id} (seg_id, url, status) VALUES """
         for i, item in enumerate(ts_list):
@@ -72,27 +72,36 @@ class SqliteConn:
         sql_multiple_insert = sql_multiple_insert[:-1] + ";"
         self.cursor.execute(sql_multiple_insert)
         self.conn.commit()
-        logging.info("Inserted %d segments into movie_seg_%s table.", len(ts_list), movie_id)
-    
+        logging.debug("Inserted %d segments into movie_seg_%s table.", len(ts_list), movie_id)
+
     def delete_movie_seg_table(self, movie_id):
         """
         Delete the movie-level segment task table."""
         self.cursor.execute(\
             f'''DROP TABLE movie_seg_{movie_id.replace('-', '_')}''')
         self.conn.commit()
-        logging.info("Deleted movie_seg_%s table.", movie_id)
+        logging.debug("Deleted movie_seg_%s table.", movie_id)
         self.cursor.execute('''VACUUM''')
         self.conn.commit()
-        return
-    
-    def get_waiting_segments_for_movie(self, movie_id):
+
+    def get_segments_by_status(self, movie_id, status=None):
         """
-        Get unfinished segments as pending tasks."""
-        self.cursor.execute(\
-            f'''SELECT seg_id, url FROM movie_seg_{movie_id.replace('-', '_')}         
-                WHERE status = 'waiting' ''')
+        Get movie segments for downloading tasks.
+        """
+        if not status:
+            self.cursor.execute(\
+                f'''SELECT seg_id, url, local_path
+                    FROM movie_seg_{movie_id.replace('-', '_')}''')
+        elif not status in ('waiting', 'finished'):
+            logging.error("Invalid segment status: %s", status)
+            return None
+        else:
+            self.cursor.execute(\
+                f'''SELECT seg_id, url, local_path
+                    FROM movie_seg_{movie_id.replace('-', '_')}
+                    WHERE status = '{status}' ''')
         return self.cursor.fetchall()
-    
+
     def update_segment_status(self, movie_id, seg_id, new_status, local_path=""):
         """
         Update the status of a specific segment."""
@@ -110,8 +119,8 @@ class SqliteConn:
         table_records = self.cursor.fetchall()
         return list(map(lambda x: x[0], table_records))
 
-    def insert_movie(self, movie_id, title, short_url, status, playlist_m3u8,
-                     has_1080p, has_720p, has_480p, has_360p, movie_m3u8_url):
+    def insert_movie(self, movie_id, title, short_url, status, playlist_m3u8, 
+                     resolution_dict, movie_m3u8_url):
         """
         Insert a new movie to be downloaded into the movies table.
         """
@@ -126,14 +135,15 @@ class SqliteConn:
                 has_1080p, has_720p, has_480p, has_360p, movie_m3u8, refresh_time)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (movie_id, title, short_url, status,
-             playlist_m3u8, has_1080p, has_720p, has_480p,
-             has_360p, movie_m3u8_url, cur_time))
+             playlist_m3u8, resolution_dict["has_1080p"], resolution_dict["has_720p"],
+             resolution_dict["has_480p"], resolution_dict["has_360p"],
+             movie_m3u8_url, cur_time))
         self.conn.commit()
-        logging.info("Inserted movie ID %s into database.", movie_id)
+        logging.debug("Inserted movie ID %s into database.", movie_id)
         return
 
     def update_movie(self, movie_id, title, short_url, status, playlist_m3u8,
-                     has_1080p, has_720p, has_480p, has_360p, movie_m3u8_url):
+                     resolution_dict, movie_m3u8_url):
         """
         Insert a new movie to be downloaded into the movies table.
         """
@@ -148,10 +158,11 @@ class SqliteConn:
             has_1080p=?, has_720p=?, has_480p=?, has_360p=?, movie_m3u8=?, refresh_time=?
             WHERE movie_id = ?''',
             (title, short_url, status,
-             playlist_m3u8, has_1080p, has_720p, has_480p,
-             has_360p, movie_m3u8_url, cur_time, movie_id))
+             playlist_m3u8, resolution_dict["has_1080p"], resolution_dict["has_720p"],
+             resolution_dict["has_480p"], resolution_dict["has_360p"],
+             movie_m3u8_url, cur_time, movie_id))
         self.conn.commit()
-        logging.info("Updated movie ID %s into database.", movie_id)
+        logging.debug("Updated movie ID %s into database.", movie_id)
         return
 
     def update_movie_status(self, movie_id, new_status):
@@ -164,7 +175,7 @@ class SqliteConn:
             WHERE movie_id = ?''',
             (new_status, cur_time, movie_id))
         self.conn.commit()
-        logging.info("Updated movie ID %s status=%s into database.", movie_id, new_status)
+        logging.debug("Updated movie ID %s status=%s into database.", movie_id, new_status)
 
     def get_movie_info_by_id(self, movie_id):
         """
@@ -196,24 +207,14 @@ class SqliteConn:
         count = self.cursor.fetchone()[0]
         return count
 
-    def get_waiting_movie_ids(self):
+    def get_movie_ids_by_status(self, status):
         """
-        Get the movie_id of the movie which is currently 'waiting'.
-        """
-        self.cursor.execute(\
-            '''SELECT movie_id FROM movies WHERE status = 'waiting' ''')
-        records = self.cursor.fetchall()
-        logging.info("Found %d waiting movies.", len(records))
-        return [record[0] for record in records]
-
-    def get_downloading_movie_ids(self):
-        """
-        Get the movie_id of the movie which is currently 'downloading'.
+        Get the movie_id of the movie under a specific status.
         """
         self.cursor.execute(\
-            '''SELECT movie_id FROM movies WHERE status = 'downloading' ''')
+            '''SELECT movie_id FROM movies WHERE status = ? ''', (status,))
         records = self.cursor.fetchall()
-        logging.info("Found %d downloading movies.", len(records))
+        logging.info("Found %d movies with status %s.", len(records), status)
         return [record[0] for record in records]
 
     def is_movie_id_exist(self, movie_id):
