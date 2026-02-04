@@ -105,11 +105,22 @@ class SqliteConn:
     def update_segment_status(self, movie_id, seg_id, new_status, local_path=""):
         """
         Update the status of a specific segment."""
-        self.cursor.execute(\
-            f'''UPDATE movie_seg_{movie_id.replace('-', '_')} 
-                SET status=?, local_path=? WHERE seg_id=?''',
-            (new_status, local_path, seg_id))
-        self.conn.commit()
+        retry_cnt = 0
+        while retry_cnt <= 3:
+            try:
+                self.cursor.execute(\
+                f'''UPDATE movie_seg_{movie_id.replace('-', '_')} 
+                    SET status=?, local_path=? WHERE seg_id=?''',
+                (new_status, local_path, seg_id))
+                self.conn.commit()
+                break
+            except sqlite3.OperationalError as e:
+                logging.error("SQLite OperationalError: %s. Retrying %d/3...",
+                              str(e), retry_cnt+1)
+                retry_cnt += 1
+                if retry_cnt > 3:
+                    raise e
+        return self
 
     def get_tables(self):
         """
@@ -198,15 +209,6 @@ class SqliteConn:
                 "refresh_time": movie_row[11]
                 }
 
-    def count_waiting_movies(self):
-        """
-        Count how many movies are in 'waiting' status.
-        """
-        self.cursor.execute(\
-            '''SELECT COUNT(*) FROM movies WHERE status = 'waiting' ''')
-        count = self.cursor.fetchone()[0]
-        return count
-
     def get_movie_ids_by_status(self, status):
         """
         Get the movie_id of the movie under a specific status.
@@ -238,3 +240,14 @@ class SqliteConn:
     def close(self):
         """Close the connection."""
         self.conn.close()
+
+'''class SqliteMovieSegConn:
+    def __init__(self, movie_id):
+        """
+        Initialize the SQLite connection for a specific movie segment table.
+        """
+        logging.debug("Connecting to SQLite database 'missav.db' for movie %s ...", movie_id)
+        self.conn = sqlite3.connect(config.SQLITE_DB_PATH)
+        self.cursor = self.conn.cursor()
+        self.movie_id = movie_id
+        logging.debug("Connected to database for movie %s.", movie_id)'''

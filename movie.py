@@ -15,11 +15,13 @@ class Movie:
     Movie class to represent a movie object.
     Can be initialized from internet or database.
     '''
-    def __init__(self, movie_id: str, source: str):
+    def __init__(self, movie_id: str, source: str, url: str = None):
         logging.info("Initializing Movie %s from %s", movie_id, source)
         self.movie_id = movie_id
         self.movie_title = ""
         self.movie_short_url = ""
+        if url:
+            self.movie_short_url = url
         self.movie_m3u8_url = ""
         self.movie_reso_playlists = {}
         self.resolutions = {"has_1080p": False, "has_720p": False,
@@ -28,7 +30,7 @@ class Movie:
         self.status = "waiting"
         if source == "internet":
             logging.info("Getting movie info from internet")
-            self.get_movie_info_from_internet()
+            self.get_movie_info_from_internet(url=url)
         elif source == "database":
             if not is_movie_id_in_db(self.movie_id):
                 raise KeyError(f"Movie {self.movie_id} does not exist in DB.")
@@ -53,13 +55,16 @@ class Movie:
         print(f"Status: \t{self.status}")
         print("----------------------------------------")
 
-    def get_movie_info_from_internet(self):
+    def get_movie_info_from_internet(self, url=None):
         '''
         Crawl movie info from internet given movie_id
         Store into current movie object.
         '''
         self.movie_short_url = utils_http.get_url_from_id(self.movie_id)
-        movie_html = utils_http.get_html_from_url(self.movie_short_url)
+        if not url:
+            movie_html = utils_http.get_html_from_url(self.movie_short_url)
+        else:
+            movie_html = utils_http.get_html_from_url(url)
         self.movie_title = utils_http.get_movie_title_from_html(movie_html)
         self.movie_m3u8_url = utils_http.get_movie_m3u8_from_html(movie_html)
         self.movie_reso_playlists = utils_http.parse_movie_m3u8(
@@ -90,6 +95,11 @@ class Movie:
         '''
         Insert the current movie object into the database.
         '''
+        if is_movie_id_in_db(self.movie_id):
+            logging.error("Movie %s already exists in database. Skip inserting.", self.movie_id)
+            self.get_movie_info_from_db()
+            self.print()
+            return
         conn = sqlite_conn.SqliteConn()
         conn.insert_movie(self.movie_id, self.movie_title, self.movie_short_url,
                           self.status, self.playlist_m3u8_url, self.resolutions,
@@ -139,4 +149,6 @@ def delete_movie_from_db(movie_id: str):
     conn = sqlite_conn.SqliteConn()
     conn.delete_movie_by_id(movie_id)
     logging.info("Deleted movie ID %s from database", movie_id)
+    conn.delete_movie_seg_table(movie_id)
+    logging.info("Deleted movie segment table %s from database", movie_id)
     conn.close()

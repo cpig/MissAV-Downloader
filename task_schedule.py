@@ -1,7 +1,11 @@
+"""
+Downloading tasks scheduler, including tasks' starting, tracking and finishing.
+Author: c_pig8828@163.com
+Date: 2025-12-24
+"""
 import logging
 import os
 import queue
-import shutil
 import threading
 import time
 import tqdm
@@ -9,10 +13,10 @@ import tqdm
 import config
 import movie
 import sqlite_conn
+import utils_file
 import utils_http
 
 queue_lock = threading.Lock()
-# finish_lock = threading.Lock()
 
 def get_movie_id_to_download():
     """
@@ -82,15 +86,13 @@ class SegmentDownloadThread(threading.Thread):
             try:
                 utils_http.download_single_segment(seg_url, local_path)
                 logging.debug("Downloaded segment %d", seg_id)
-                conn = sqlite_conn.SqliteConn()
-                conn.update_segment_status(self.movie_id, seg_id, "finished", local_path)
-                conn.close()
-                # finished_queue.put(seg_id)
+                sqlite_conn.SqliteConn()\
+                           .update_segment_status(self.movie_id, seg_id, "finished", local_path)\
+                           .close()
             except Exception as e:
                 logging.error("Error downloading segment %d: %s", seg_id, str(e))
                 with queue_lock:
                     self.segment_queue.put((seg_id, seg_url))
-            # download_movie_segment(self.segment_queue, self.movie_id)
             logging.debug("Thread %s finished for movie ID %s", self.name, self.movie_id)
 
 def download_movie_by_segments(movie_to_download: movie.Movie, num_threads: int=config.THREADS):
@@ -102,21 +104,21 @@ def download_movie_by_segments(movie_to_download: movie.Movie, num_threads: int=
     4. Wait for all threads to finish
     """
     # 获取下载文件列表
+    movie_id = movie_to_download.movie_id
     conn = sqlite_conn.SqliteConn()
-    waiting_segments = conn.get_segments_by_status(movie_to_download.movie_id, 'waiting')
-    total_segments_cnt = len(conn.get_segments_by_status(movie_to_download.movie_id))
+    waiting_segments = conn.get_segments_by_status(movie_id, 'waiting')
+    total_segments_cnt = len(conn.get_segments_by_status(movie_id))
     conn.close()
     # 创建下载任务队列
     segment_queue = queue.Queue()
     for seg_id, seg_url, _ in waiting_segments:
         segment_queue.put((seg_id, seg_url))
     logging.info("Inserted %i pending tasks into queue", segment_queue.qsize())
-    if not os.path.exists(movie_to_download.movie_id):
-        os.makedirs(movie_to_download.movie_id)
+    utils_file.create_movie_dir(movie_id)
     logging.info("Creating downloading threads")
     initial_tasks = segment_queue.qsize()
     download_bar = tqdm.tqdm(total=total_segments_cnt,
-                             desc=f"Downloading {movie_to_download.movie_id}")
+                             desc=f"Downloading {movie_id}")
     download_bar.update(total_segments_cnt - initial_tasks)
     task_progress = 0
     # 创建下载线程
@@ -124,8 +126,8 @@ def download_movie_by_segments(movie_to_download: movie.Movie, num_threads: int=
     try:
         for i in range(num_threads):
             thread = SegmentDownloadThread(thread_name=f"Thread-{i+1}",
-                                       segment_queue=segment_queue,
-                                       movie_id=movie_to_download.movie_id)
+                                           segment_queue=segment_queue,
+                                           movie_id=movie_id)
             thread.start()
             threads.append(thread)
         logging.info("Created %d downloading threads", num_threads)
@@ -146,7 +148,7 @@ def download_movie_by_segments(movie_to_download: movie.Movie, num_threads: int=
             thread.join()
         raise KeyboardInterrupt("Forced stopping download tasks.") from e
     download_bar.close()
-    logging.info("All segments downloaded for movie ID %s", movie_to_download.movie_id)
+    logging.info("All segments downloaded for movie ID %s", movie_id)
 
 def merge_ts_into_one(movie_to_download: movie.Movie):
     """
@@ -155,7 +157,7 @@ def merge_ts_into_one(movie_to_download: movie.Movie):
     """
     logging.info("Merging downloaded ts files ...")
     movie_id = movie_to_download.movie_id
-    movie_title = movie_to_download.movie_title
+    movie_title = movie_to_download.movie_title.replace(':', '').replace('/',' ')
     # 合并所有视频片段并重命名
     # os.system(f'copy /b {movie_id}\\*.ts "{movie_title}.ts"')
     with open(f"{movie_title}.ts", 'wb') as fout:
@@ -169,7 +171,7 @@ def merge_ts_into_one(movie_to_download: movie.Movie):
         merge_bar.close()
     # 删除下载中间文件
     # os.system(f"rmdir /s /q  {movie_id}")
-    shutil.rmtree(movie_id)
+    utils_file.delete_movie_dir(movie_id)
     logging.info("Merged all .ts segments into %s.ts", movie_title)
 
 def download_movie(movie_id: str):
@@ -199,7 +201,8 @@ def download_movie(movie_id: str):
 
 def download_movies_pending():
     """
-    Download all pending movies in a batch."""
+    Download all pending movies in a batch.
+    """
     movie_pending = get_movie_id_to_download()
     while movie_pending:
         download_movie(movie_pending)

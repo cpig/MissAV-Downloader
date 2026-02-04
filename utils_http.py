@@ -2,14 +2,16 @@
 HTTP utility functions for MissAV Downloader.
 Includes functions for constructing URLs, fetching HTML content,
 parsing m3u8 files, and downloading video segments.
+Author: c_pig8828@163.com
+Date: 2025-12-24
 """
 import logging
-import os
 import re
 import time
 import urllib.request
 
 import config
+import utils_file
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s: %(message)s')
 
@@ -147,9 +149,7 @@ def download_single_segment(ts_url, target_file):
     headers['Host'] = parse_host(ts_url)
     req = urllib.request.Request(ts_url, headers=headers)
     with urllib.request.urlopen(req, timeout=config.HTTP_TIMEOUT) as response:
-        if os.path.exists(target_file):
-            os.remove(target_file)
-            logging.debug("Removed existing file %s", target_file)
+        utils_file.delete_file(target_file)
         with open(target_file, 'wb') as f:
             f.write(response.read())
     logging.debug("Downloaded segment to %s", target_file)
