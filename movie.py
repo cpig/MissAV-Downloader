@@ -149,6 +149,9 @@ def delete_movie_from_db(movie_id: str):
     conn = sqlite_conn.SqliteConn()
     conn.delete_movie_by_id(movie_id)
     logging.info("Deleted movie ID %s from database", movie_id)
-    conn.delete_movie_seg_table(movie_id)
-    logging.info("Deleted movie segment table %s from database", movie_id)
+    try:
+        conn.delete_movie_seg_table(movie_id)
+        logging.info("Deleted movie segment table %s from database", movie_id)
+    except:
+        logging.info("Movie segment table does not exist")
     conn.close()

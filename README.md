@@ -19,10 +19,22 @@ The project is still under development.
 
 ```python main.py list -i sone-764```
 
+- 展示库中所有状态waiting的电影：
+
+```python main.py list -s waiting```
+
+- 展示库中所有标题包含愛才りあ的电影：
+
+```python main.py list -k 愛才りあ```
+
+- 展示库中所有状态waiting且标题包含愛才りあ的电影：
+
+```python main.py list -s waiting -k 愛才りあ```
+
 - 删除一条库中电影
 
 ```python main.py delete -i sone-764```
 
 - 修改电影状态为已完成
 
-```python main.py change -i sone-764 -c finished```
+```python main.py change -i sone-764 -s finished```

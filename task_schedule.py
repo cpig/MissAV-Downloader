@@ -24,12 +24,12 @@ def get_movie_id_to_download():
     Priority: downloading -> waiting
     """
     conn = sqlite_conn.SqliteConn()
-    downloading_movies = conn.get_movie_ids_by_status('downloading')
+    downloading_movies = conn.get_movie_by_status('downloading', is_id_only=True)
     if downloading_movies:
         logging.info("Got a downloading movie: %s", downloading_movies[0])
         conn.close()
         return downloading_movies[0]
-    waiting_movies = conn.get_movie_ids_by_status('waiting')
+    waiting_movies = conn.get_movie_by_status('waiting', is_id_only=True)
     if waiting_movies:
         logging.info("Got a waiting movie: %s", waiting_movies[0])
         conn.close()

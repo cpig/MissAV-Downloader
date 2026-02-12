@@ -209,15 +209,28 @@ class SqliteConn:
                 "refresh_time": movie_row[11]
                 }
 
-    def get_movie_ids_by_status(self, status):
+    def get_movie_by_status(self, status, is_id_only=False):
         """
         Get the movie_id of the movie under a specific status.
         """
         self.cursor.execute(\
-            '''SELECT movie_id FROM movies WHERE status = ? ''', (status,))
+            '''SELECT movie_id, movie_title FROM movies WHERE status = ? ''', (status,))
         records = self.cursor.fetchall()
         logging.info("Found %d movies with status %s.", len(records), status)
-        return [record[0] for record in records]
+        if is_id_only:
+            return [record[0] for record in records]
+        return records
+
+    def get_movie_by_keyword(self, keyword):
+        """
+        Get the movie_id of the movie with a specific keyword.
+        """
+        self.cursor.execute(\
+            '''SELECT movie_id, status, movie_title FROM movies WHERE movie_title LIKE ? ''', 
+            (f'%{keyword}%',))
+        records = self.cursor.fetchall()
+        logging.info("Found %d movies with keyword %s.", len(records), keyword)
+        return records
 
     def is_movie_id_exist(self, movie_id):
         """
@@ -240,14 +253,3 @@ class SqliteConn:
     def close(self):
         """Close the connection."""
         self.conn.close()
-
-'''class SqliteMovieSegConn:
-    def __init__(self, movie_id):
-        """
-        Initialize the SQLite connection for a specific movie segment table.
-        """
-        logging.debug("Connecting to SQLite database 'missav.db' for movie %s ...", movie_id)
-        self.conn = sqlite3.connect(config.SQLITE_DB_PATH)
-        self.cursor = self.conn.cursor()
-        self.movie_id = movie_id
-        logging.debug("Connected to database for movie %s.", movie_id)'''
