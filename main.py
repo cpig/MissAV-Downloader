@@ -62,7 +62,7 @@ if args.action == "list":
             logging.error("Movie ID %s not found in database", args.id)
     # 按状态和关键词查找
     # elif args.status and args.keyword:
-    #    logging.info("Listing all the movie with status=%s and keyword=%s", args.status, args.keyword)
+    #    logging.info("Listing movie with status=%s and keyword=%s", args.status, args.keyword)
     elif args.status:
         logging.info("Listing all the movie with status=%s", args.status)
         if args.keyword:
@@ -70,8 +70,9 @@ if args.action == "list":
         conn = sqlite_conn.SqliteConn()
         listing_movies = conn.get_movie_by_status(args.status)
         for movie in listing_movies:
-            if args.keyword and (args.keyword in movie[1]):
-                print(movie[0]+"\t"+movie[1])
+            if args.keyword and (args.keyword not in movie[1]):
+                continue
+            print(movie[0]+"\t"+movie[1])
     elif args.keyword:
         logging.info("Listing all the movie with keyword=%s", args.keyword)
         conn = sqlite_conn.SqliteConn()
