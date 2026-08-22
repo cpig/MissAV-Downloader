@@ -1,6 +1,11 @@
-# MissAV-Downloader V0.1
+# !Warning!
+2026 Jul:
+MissAV site has lauched more strict anti-crawler technique, and this method does not work anymore.
+I am sorry. 
 
-请安装requirements.txt中的依赖库.
+
+
+
 
 ## 下载
 
